@@ -66,11 +66,12 @@ User question: ${message}`
       success: true
     })
 
-  } catch (error: any) {
-    console.error('CivicBot error:', error.message)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('CivicBot error:', errorMessage)
     return Response.json(
       { 
-        error: error.message,
+        error: errorMessage,
         success: false
       },
       { status: 500 }

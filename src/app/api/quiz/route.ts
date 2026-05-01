@@ -74,11 +74,12 @@ Important:
       success: true
     })
 
-  } catch (error: any) {
-    console.error('Quiz error:', error.message)
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Quiz error:', errorMessage)
     return Response.json(
       { 
-        error: error.message,
+        error: errorMessage,
         success: false  
       },
       { status: 500 }
