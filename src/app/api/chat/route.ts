@@ -1,5 +1,5 @@
-import { NextRequest } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -7,31 +7,73 @@ export const runtime = 'nodejs'
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.GEMINI_API_KEY
+    
     if (!apiKey) {
-      return Response.json({ error: 'AI service not configured.' }, { status: 500 })
+      return Response.json(
+        { error: 'API key not configured' },
+        { status: 500 }
+      )
     }
 
     const body = await req.json()
-    const message = body.message || body.prompt || ''
+    const message = body.message || 
+                    body.prompt || ''
+    
     if (!message.trim()) {
-      return Response.json({ error: 'Message cannot be empty' }, { status: 400 })
+      return Response.json(
+        { error: 'Message is empty' },
+        { status: 400 }
+      )
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+    
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash'
+    })
 
-    const result = await model.generateContent(
-      `You are CivicBot, a friendly non-partisan Indian election education assistant.
-Only answer about Indian elections, voter registration, EVM, NOTA, voting rights.
-Use emojis, simple language for first-time voters.
+    const prompt = `You are CivicBot, a friendly 
+non-partisan Indian election education assistant.
+
+Only answer questions about:
+- Indian elections and voting process
+- Voter registration and EPIC cards
+- EVM and VVPAT machines
+- NOTA option
+- Election Commission of India
+- Lok Sabha and Vidhan Sabha
+- Model Code of Conduct
+- Candidate nominations
+- Vote counting and results
+
+Format your response with:
+- Relevant emojis
+- Short clear paragraphs
+- Bullet points for lists
+- Simple language for first time voters
+
+If asked anything else, say:
+"I can only help with Indian election topics! 
+Ask me about voting, registration, or EVMs 🗳️"
 
 User question: ${message}`
-    )
 
-    return Response.json({ response: result.response.text(), success: true })
-  } catch (err: unknown) {
-    const e = err as { message?: string }
-    console.error('CivicBot error:', e.message)
-    return Response.json({ error: e.message, success: false }, { status: 500 })
+    const result = await model.generateContent(prompt)
+    const response = result.response.text()
+    
+    return Response.json({ 
+      response: response,
+      success: true
+    })
+
+  } catch (error: any) {
+    console.error('CivicBot error:', error.message)
+    return Response.json(
+      { 
+        error: error.message,
+        success: false
+      },
+      { status: 500 }
+    )
   }
 }

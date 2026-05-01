@@ -1,5 +1,5 @@
-import { NextRequest } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -7,8 +7,12 @@ export const runtime = 'nodejs'
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.GEMINI_API_KEY
+    
     if (!apiKey) {
-      return Response.json({ error: 'AI service not configured.' }, { status: 500 })
+      return Response.json(
+        { error: 'API key not configured' },
+        { status: 500 }
+      )
     }
 
     const body = await req.json()
@@ -16,41 +20,68 @@ export async function POST(req: NextRequest) {
     const difficulty = body.difficulty || 'Basic'
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+    
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash'
+    })
 
-    const result = await model.generateContent(
-      `Generate exactly 5 multiple choice questions about "${topic}" at "${difficulty}" level for Indian election education.
+    const prompt = `Generate exactly 5 multiple choice 
+questions about "${topic}" at "${difficulty}" level 
+for Indian election education.
 
-Return ONLY this exact JSON format, nothing else:
+Return ONLY valid JSON, no markdown, no explanation:
 {
   "questions": [
     {
-      "question": "Question text?",
-      "options": ["A", "B", "C", "D"],
+      "question": "Question text here?",
+      "options": [
+        "Option A",
+        "Option B", 
+        "Option C",
+        "Option D"
+      ],
       "correct": 0,
-      "explanation": "Explanation here"
+      "explanation": "Why this is correct"
     }
   ]
 }
 
-Rules:
-- exactly 5 questions, exactly 4 options each
-- correct is index 0-3
-- relevant to Indian elections
-- return ONLY JSON, no markdown`
-    )
+Important:
+- Exactly 5 questions
+- Exactly 4 options each
+- correct = index of right answer (0,1,2 or 3)
+- About Indian elections only
+- Return ONLY the JSON object above`
 
+    const result = await model.generateContent(prompt)
     let text = result.response.text()
-    text = text.replace(/\`\`\`json/gi, '').replace(/\`\`\`/gi, '').trim()
+    
+    text = text
+      .replace(/```json/gi, '')
+      .replace(/```/gi, '')
+      .trim()
+    
     const start = text.indexOf('{')
     const end = text.lastIndexOf('}')
-    if (start !== -1 && end !== -1) text = text.substring(start, end + 1)
-
+    if (start !== -1 && end !== -1) {
+      text = text.substring(start, end + 1)
+    }
+    
     const parsed = JSON.parse(text)
-    return Response.json({ ...parsed, success: true })
-  } catch (err: unknown) {
-    const e = err as { message?: string }
-    console.error('Quiz error:', e.message)
-    return Response.json({ error: e.message, success: false }, { status: 500 })
+    
+    return Response.json({
+      questions: parsed.questions,
+      success: true
+    })
+
+  } catch (error: any) {
+    console.error('Quiz error:', error.message)
+    return Response.json(
+      { 
+        error: error.message,
+        success: false  
+      },
+      { status: 500 }
+    )
   }
 }
