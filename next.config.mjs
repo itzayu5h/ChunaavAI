@@ -1,5 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
+
+  // Force all pages and API routes to render dynamically at runtime.
+  // This prevents Next.js from trying to statically pre-render pages
+  // that depend on Firebase/Gemini during the Docker build step,
+  // where those services are unavailable.
+  experimental: {
+    // ppr is NOT used — this is the safe way
+  },
+
   async headers() {
     return [
       {

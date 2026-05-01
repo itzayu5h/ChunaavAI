@@ -1,98 +1,94 @@
-/**
- * Quiz Generation API Route
- * POST /api/quiz
- * Generates India-specific election quiz questions using Gemini AI
- */
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import { NextRequest } from 'next/server'
 
-import { NextRequest, NextResponse } from 'next/server'
-import { generateQuizQuestions } from '@/lib/gemini'
-import type { QuizRequest, QuizQuestion, ApiResponse } from '@/types/india'
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-const ALLOWED_TOPICS = [
-  "Voter Registration",
-  "EVM & VVPAT",
-  "Lok Sabha",
-  "Vidhan Sabha",
-  "Model Code of Conduct",
-  "NOTA"
-];
-
-const ALLOWED_DIFFICULTIES = ["basic", "intermediate", "advanced", "Basic", "Intermediate", "Advanced"];
-
-/**
- * Handle POST requests to generate quiz questions.
- * Validates auth, topic and difficulty, clamps question count to 1-10,
- * then delegates to Gemini for bilingual quiz generation.
- *
- * @param request - Incoming Next.js API request with QuizRequest body
- * @returns JSON ApiResponse<QuizQuestion[]> with generated questions or error
- */
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest) {
   try {
-    // 1. Verify Firebase Auth token in header
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Unauthorized: Missing or invalid token' },
-        { status: 401 }
-      );
-    }
+    const apiKey = process.env.GEMINI_API_KEY
 
-    const body = (await request.json()) as QuizRequest
+    console.log('Quiz API called')
+    console.log('API Key exists:', !!apiKey)
 
-    if (!body.topic || !body.difficulty) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Topic and difficulty required' },
-        { status: 400 }
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY is not set!')
+      return Response.json(
+        { error: 'Quiz service not configured.' },
+        { status: 500 }
       )
     }
 
-    // Validate topic
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!ALLOWED_TOPICS.includes(body.topic as any)) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Invalid topic. Please select from the allowed list.' },
-        { status: 400 }
-      )
+    const body = await req.json()
+    const topic = body.topic || 'Voter Registration'
+    const difficulty = body.difficulty || 'Basic'
+
+    console.log('Generating quiz for:', topic, difficulty)
+
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: {
+        temperature: 0.8,
+        maxOutputTokens: 2048,
+      },
+    })
+
+    const prompt = `Generate exactly 5 multiple choice questions about "${topic}" at "${difficulty}" level for Indian election education.
+
+Return ONLY this exact JSON format, nothing else:
+{
+  "questions": [
+    {
+      "question": "Question text?",
+      "options": ["A", "B", "C", "D"],
+      "correct": 0,
+      "explanation": "Explanation here"
+    }
+  ]
+}
+
+Rules:
+- exactly 5 questions
+- exactly 4 options each
+- correct is index 0-3
+- relevant to Indian elections
+- return ONLY JSON no markdown`
+
+    const result = await model.generateContent(prompt)
+    let text = result.response.text()
+
+    console.log('Raw Gemini response:', text.substring(0, 200))
+
+    text = text
+      .replace(/```json/gi, '')
+      .replace(/```/gi, '')
+      .trim()
+
+    const startIndex = text.indexOf('{')
+    const endIndex = text.lastIndexOf('}')
+    if (startIndex !== -1 && endIndex !== -1) {
+      text = text.substring(startIndex, endIndex + 1)
     }
 
-    // Validate difficulty
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!ALLOWED_DIFFICULTIES.includes(body.difficulty as any)) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Invalid difficulty. Must be Basic, Intermediate, or Advanced.' },
-        { status: 400 }
-      )
-    }
+    const parsed = JSON.parse(text)
 
-    // Clamp question count: minimum 1, maximum 10
-    const count = Math.min(Math.max(body.numberOfQuestions ?? 5, 1), 10)
+    console.log('Quiz generated successfully:', parsed.questions?.length, 'questions')
 
-    // Normalize difficulty for Gemini helper
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const normalizedDifficulty = body.difficulty.toLowerCase() as any;
-
-    const questions = await generateQuizQuestions(body.topic, normalizedDifficulty, count)
-
-    // Security headers
-    const headers = new Headers();
-    headers.set('X-Content-Type-Options', 'nosniff');
-    headers.set('X-Frame-Options', 'DENY');
-
-    return NextResponse.json<ApiResponse<QuizQuestion[]>>({
+    return Response.json({
+      ...parsed,
       success: true,
-      data: questions,
-    }, { headers })
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error)
-    console.error('Quiz API error:', errMsg)
-    return NextResponse.json<ApiResponse<null>>(
+    })
+  } catch (error: unknown) {
+    const err = error as { message?: string; stack?: string }
+    console.error('Quiz error details:', {
+      message: err.message,
+      stack: err.stack,
+    })
+    return Response.json(
       {
+        error: 'Quiz error: ' + err.message,
         success: false,
-        error:
-          process.env.NODE_ENV === 'development'
-            ? `Gemini error: ${errMsg}`
-            : 'Failed to generate quiz. Please try again.',
       },
       { status: 500 }
     )
