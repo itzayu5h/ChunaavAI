@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -6,18 +5,7 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY
-
     console.log('Quiz API called')
-    console.log('API Key exists:', !!apiKey)
-
-    if (!apiKey) {
-      console.error('GEMINI_API_KEY is not set!')
-      return Response.json(
-        { error: 'Quiz service not configured.' },
-        { status: 500 }
-      )
-    }
 
     const body = await req.json()
     const topic = body.topic || 'Voter Registration'
@@ -25,8 +13,15 @@ export async function POST(req: NextRequest) {
 
     console.log('Generating quiz for:', topic, difficulty)
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
+    // Lazy import — VertexAI is only loaded when a request arrives, never at build time
+    const { VertexAI } = await import('@google-cloud/vertexai')
+
+    const vertexAI = new VertexAI({
+      project: 'chunaavai-c1dda',
+      location: 'asia-south1',
+    })
+
+    const model = vertexAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.8,
@@ -56,9 +51,9 @@ Rules:
 - return ONLY JSON no markdown`
 
     const result = await model.generateContent(prompt)
-    let text = result.response.text()
+    let text = result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 
-    console.log('Raw Gemini response:', text.substring(0, 200))
+    console.log('Raw Vertex AI response:', text.substring(0, 200))
 
     text = text
       .replace(/```json/gi, '')
@@ -72,24 +67,14 @@ Rules:
     }
 
     const parsed = JSON.parse(text)
+    console.log('Quiz generated:', parsed.questions?.length, 'questions')
 
-    console.log('Quiz generated successfully:', parsed.questions?.length, 'questions')
-
-    return Response.json({
-      ...parsed,
-      success: true,
-    })
+    return Response.json({ ...parsed, success: true })
   } catch (error: unknown) {
     const err = error as { message?: string; stack?: string }
-    console.error('Quiz error details:', {
-      message: err.message,
-      stack: err.stack,
-    })
+    console.error('Quiz error:', err.message)
     return Response.json(
-      {
-        error: 'Quiz error: ' + err.message,
-        success: false,
-      },
+      { error: 'Quiz error: ' + err.message, success: false },
       { status: 500 }
     )
   }

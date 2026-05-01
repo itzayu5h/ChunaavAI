@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -6,32 +5,24 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY
-
     console.log('Chat API called')
-    console.log('API Key exists:', !!apiKey)
-    console.log('API Key length:', apiKey?.length)
-
-    if (!apiKey) {
-      console.error('GEMINI_API_KEY is not set!')
-      return Response.json(
-        { error: 'AI service not configured. Missing API key.' },
-        { status: 500 }
-      )
-    }
 
     const body = await req.json()
     const message = body.message || body.prompt || ''
 
     if (!message.trim()) {
-      return Response.json(
-        { error: 'Message cannot be empty' },
-        { status: 400 }
-      )
+      return Response.json({ error: 'Message cannot be empty' }, { status: 400 })
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
+    // Lazy import — VertexAI is only loaded when a request arrives, never at build time
+    const { VertexAI } = await import('@google-cloud/vertexai')
+
+    const vertexAI = new VertexAI({
+      project: 'chunaavai-c1dda',
+      location: 'asia-south1',
+    })
+
+    const model = vertexAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.7,
@@ -51,26 +42,16 @@ RULES:
 User question: ${message}`
 
     const result = await model.generateContent(prompt)
-    const response = result.response.text()
+    const response = result.response.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 
-    console.log('Gemini response received, length:', response.length)
+    console.log('Vertex AI response received, length:', response.length)
 
-    return Response.json({
-      response: response,
-      success: true,
-    })
+    return Response.json({ response, success: true })
   } catch (error: unknown) {
-    const err = error as { message?: string; status?: number; stack?: string }
-    console.error('CivicBot error details:', {
-      message: err.message,
-      status: err.status,
-      stack: err.stack,
-    })
+    const err = error as { message?: string; stack?: string }
+    console.error('CivicBot error:', err.message)
     return Response.json(
-      {
-        error: 'CivicBot error: ' + err.message,
-        success: false,
-      },
+      { error: 'CivicBot error: ' + err.message, success: false },
       { status: 500 }
     )
   }
