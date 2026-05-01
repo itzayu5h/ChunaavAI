@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // 'standalone' is for Docker/Cloud Run only. Vercel manages its own build output.
-  // output: 'standalone',
+  output: 'standalone',
 
   async headers() {
     return [

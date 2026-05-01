@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest } from 'next/server'
+import { checkRateLimit } from '@/lib/rate-limiter'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,8 +17,23 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const topic = body.topic || 'Voter Registration'
-    const difficulty = body.difficulty || 'Basic'
+    const { userId, topic: rawTopic, difficulty: rawDifficulty } = body
+    const topic = rawTopic || 'Voter Registration'
+    const difficulty = rawDifficulty || 'Basic'
+
+    // --- Rate Limiting ---
+    if (userId) {
+      const { allowed } = await checkRateLimit(userId, 'quiz')
+      if (!allowed) {
+        return Response.json(
+          { 
+            error: 'Daily limit reached. Try again tomorrow! 🗳️',
+            limitExceeded: true 
+          },
+          { status: 429 }
+        )
+      }
+    }
 
     const genAI = new GoogleGenerativeAI(apiKey)
     

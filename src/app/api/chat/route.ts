@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest } from 'next/server'
+import { checkRateLimit } from '@/lib/rate-limiter'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -16,14 +17,28 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const message = body.message || 
-                    body.prompt || ''
+    const { userId, message: rawMessage, prompt: rawPrompt } = body
+    const message = rawMessage || rawPrompt || ''
     
     if (!message.trim()) {
       return Response.json(
         { error: 'Message is empty' },
         { status: 400 }
       )
+    }
+
+    // --- Rate Limiting ---
+    if (userId) {
+      const { allowed } = await checkRateLimit(userId, 'chat')
+      if (!allowed) {
+        return Response.json(
+          { 
+            error: 'Daily limit reached. Try again tomorrow! 🗳️',
+            limitExceeded: true 
+          },
+          { status: 429 }
+        )
+      }
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
