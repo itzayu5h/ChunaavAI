@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const difficulty = body.difficulty || 'Basic'
 
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const result = await model.generateContent(
       `Generate exactly 5 multiple choice questions about "${topic}" at "${difficulty}" level for Indian election education.

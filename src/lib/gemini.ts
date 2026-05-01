@@ -67,7 +67,7 @@ export async function sendCivicBotMessage(
   userState?: IndianState
 ): Promise<string> {
   const model = getGenAI().getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
     systemInstruction: CIVICBOT_SYSTEM_PROMPT,
   })
 
@@ -101,7 +101,7 @@ export async function generateQuizQuestions(
   count: number = 5
 ): Promise<QuizQuestion[]> {
   const model = getGenAI().getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash',
   })
 
   const pointsPerDifficulty: Record<QuizDifficulty, number> = {
